@@ -10,6 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@walletconnect/client": "^1.8.0",
+    "@walletconnect/web3-provider": "^1.8.0",
+    "@web3-react/core": "^8.2.3",
+    "@web3-react/walletconnect-connector": "^6.2.13",
     "ethers": "^6.15.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
