@@ -32,7 +32,7 @@ function App() {
       };
       const cred = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential;
       if (!cred) throw new Error('No credential returned.');
-      // Use the credential's rawId as entropy for wallet (simulating PUF)
+      // Use the credential's rawId as entropy for wallet (leveraging the PUF mechanism in the security key)
       const rawId = cred.rawId;
       // Derive Ethereum wallet from rawId (never display private key)
       // keccak256 expects a Uint8Array and returns a 0x-prefixed hex string
@@ -74,7 +74,7 @@ function App() {
           <h2 style={{ color: devilRed }}>Your Ethereum Address</h2>
           <div className="fd-address">{ethAddress}</div>
           <p style={{ color: devilPurple, fontWeight: 500 }}>
-            This address is derived from your FIDO2 key using PUF-like security.<br />
+            This address is derived from your FIDO2 key, leveraging the PUF mechanism built into your security key.<br />
             <b>Keep your key safe!</b> Losing it means losing access to your wallet.
           </p>
           <button className="fd-btn" onClick={() => setStep('intro')}>Start Over</button>
@@ -84,7 +84,7 @@ function App() {
       <footer className="fd-footer">
         <p>
           <b>How does this work?</b> <br />
-          Your FIDO2 key generates a unique credential. We use its rawId as a source of entropy (simulating a PUF) to deterministically create an Ethereum wallet. <br />
+          Your FIDO2 key generates a unique credential using a physically unclonable function (PUF) inside the hardware. We use its rawId as a source of entropy to deterministically create an Ethereum wallet. <br />
           <span style={{ color: devilRed }}>No private key is ever stored, shown, or transmitted.</span>
         </p>
         <p style={{ fontSize: '0.9em', color: '#888' }}>

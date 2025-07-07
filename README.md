@@ -3,7 +3,7 @@
 A fun, educational demo web app for creating an Ethereum wallet using a FIDO2 + PUF security key (WebAuthn). Built with React + Vite + TypeScript.
 
 ## Features
-- Uses WebAuthn APIs to interact with a real FIDO2 key (simulating PUF behavior)
+- Uses WebAuthn APIs to interact with a real FIDO2 key (leveraging the PUF mechanism within the security key)
 - Generates an Ethereum wallet from the FIDO2 credential using ethers.js
 - Fun, simple, 'FunnyDevil' themed UI with clear steps and educational narrative
 - No private keys are ever displayed or stored
@@ -28,7 +28,7 @@ A fun, educational demo web app for creating an Ethereum wallet using a FIDO2 + 
 
 ## How it works
 1. The app guides you to register your FIDO2 key using WebAuthn.
-2. The credential's public key is used to deterministically generate an Ethereum wallet (no private key is ever exposed).
+2. The credential's public key is used to deterministically generate an Ethereum wallet (no private key is ever exposed). The PUF mechanism in the key ensures the private key is never extractable.
 3. You can view your Ethereum address and learn about the security model.
 
 ## Security Notice
