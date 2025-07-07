@@ -98,14 +98,68 @@ function App() {
     }
   };
 
-  // 2b. WalletConnect via scanned QR code
+  // 2b. WalletConnect via scanned QR code or pasted URI (v1 and v2 support)
   const handleWalletConnectFromUri = async (uri: string) => {
     setError(null);
     // Detect WalletConnect v2 URI (relay-protocol param, no bridge param)
     if (/relay-protocol=/.test(uri) && !/bridge=/.test(uri)) {
-      setError('This is a WalletConnect v2 URI. This demo only supports WalletConnect v1 links. Please use a v1-compatible dApp or QR code.');
+      // WalletConnect v2 flow
+      try {
+        const { initWeb3Wallet, connectWithUriV2, listenForSessionProposals, approveSession, getWeb3Wallet } = await import('./walletconnectV2');
+        // Metadata for the wallet (required by WalletConnect v2)
+        const metadata = {
+          name: 'FunnyDevil Wallet',
+          description: 'FunnyDevil Wallet Demo (FIDO2 + PUF)',
+          url: 'https://funnydevil.demo',
+          icons: ['https://funnydevil.demo/icon.png'],
+        };
+        await initWeb3Wallet(metadata);
+        await connectWithUriV2(uri);
+        setStep('wc-connect');
+        // Listen for session proposals
+        listenForSessionProposals(async (proposal: any) => {
+          // For demo, auto-approve with the registered address
+          if (!walletRef.current) {
+            setError('Wallet not available');
+            return;
+          }
+          try {
+            await approveSession(proposal, walletRef.current.address);
+            setWcConnected(true);
+            setWcPeer({ name: proposal.params.proposer.metadata.name });
+          } catch (e: any) {
+            setError(e.message || 'Failed to approve session');
+          }
+        });
+        // Listen for v2 session requests (signing, etc)
+        const web3wallet = getWeb3Wallet();
+        if (web3wallet) {
+          web3wallet.on('session_request', async (event: any) => {
+            // Only handle eth_sign and personal_sign for demo
+            const { request, topic } = event;
+            if (request.method === 'personal_sign' || request.method === 'eth_sign') {
+              setPendingTx({ msg: request.params[0], id: request.id });
+              setStep('review');
+              // Store topic for response
+              (window as any).__fdV2Topic = topic;
+            } else {
+              await web3wallet.respondSessionRequest({
+                topic,
+                response: {
+                  id: request.id,
+                  jsonrpc: '2.0',
+                  error: { code: 42069, message: '😈 FunnyDevil only supports eth_sign and personal_sign in this demo!' },
+                },
+              });
+            }
+          });
+        }
+      } catch (e: any) {
+        setError(e.message || 'WalletConnect v2 failed');
+      }
       return;
     }
+    // WalletConnect v1 flow (default)
     try {
       const connector = new WalletConnect({ uri });
       connectorRef.current = connector;
@@ -142,7 +196,35 @@ function App() {
 
   // 3. Handle transaction review and signing
   const handleApproveTx = async () => {
-    if (!pendingTx || !walletRef.current || !connectorRef.current) return;
+    if (!pendingTx || !walletRef.current) return;
+    // v2: if __fdV2Topic is set, handle v2 signing
+    if ((window as any).__fdV2Topic) {
+      try {
+        const { getWeb3Wallet } = await import('./walletconnectV2');
+        const web3wallet = getWeb3Wallet();
+        if (!web3wallet) throw new Error('Web3Wallet not initialized');
+        const sig = await signWithPUFWallet(walletRef.current, pendingTx.msg);
+        await web3wallet.respondSessionRequest({
+          topic: (window as any).__fdV2Topic,
+          response: {
+            id: pendingTx.id,
+            jsonrpc: '2.0',
+            result: sig,
+          },
+        });
+        setPendingTx(null);
+        setStep('wc-connect');
+        (window as any).__fdV2Topic = undefined;
+      } catch (e: any) {
+        setError(e.message || 'Signing failed');
+        setPendingTx(null);
+        setStep('wc-connect');
+        (window as any).__fdV2Topic = undefined;
+      }
+      return;
+    }
+    // v1: legacy
+    if (!connectorRef.current) return;
     try {
       const sig = await signWithPUFWallet(walletRef.current, pendingTx.msg);
       connectorRef.current.approveRequest({ id: pendingTx.id, result: sig });
@@ -155,7 +237,34 @@ function App() {
       setStep('wc-connect');
     }
   };
-  const handleRejectTx = () => {
+  const handleRejectTx = async () => {
+    if (!pendingTx) return;
+    // v2: if __fdV2Topic is set, handle v2 rejection
+    if ((window as any).__fdV2Topic) {
+      try {
+        const { getWeb3Wallet } = await import('./walletconnectV2');
+        const web3wallet = getWeb3Wallet();
+        if (!web3wallet) throw new Error('Web3Wallet not initialized');
+        await web3wallet.respondSessionRequest({
+          topic: (window as any).__fdV2Topic,
+          response: {
+            id: pendingTx.id,
+            jsonrpc: '2.0',
+            error: { code: 42070, message: '😈 FunnyDevil: User rejected the request!' },
+          },
+        });
+        setPendingTx(null);
+        setStep('wc-connect');
+        (window as any).__fdV2Topic = undefined;
+      } catch (e: any) {
+        setError(e.message || 'Reject failed');
+        setPendingTx(null);
+        setStep('wc-connect');
+        (window as any).__fdV2Topic = undefined;
+      }
+      return;
+    }
+    // v1: legacy
     if (pendingTx && connectorRef.current) {
       connectorRef.current.rejectRequest({ id: pendingTx.id, error: { message: 'User rejected' } });
     }
@@ -290,17 +399,26 @@ function App() {
         </div>
       )}
 
-      {/* Transaction Review Modal */}
+      {/* Transaction Review Modal (playful devil theme) */}
       {step === 'review' && pendingTx && (
-        <div className="fd-wallet-card" style={{ border: `2px solid ${devilPurple}`, boxShadow: '0 0 24px #7209b799' }}>
-          <h2 style={{ color: devilPurple }}>Review Signature Request</h2>
-          <div style={{ background: '#ffd16633', color: devilRed, borderRadius: '1rem', padding: '1rem', margin: '1rem 0', wordBreak: 'break-all' }}>
+        <div className="fd-wallet-card" style={{ border: `2px solid ${devilPurple}`, boxShadow: '0 0 24px #7209b799', background: '#fff6', position: 'relative' }}>
+          <div style={{ position: 'absolute', top: -32, right: 16, fontSize: '2.2em', filter: 'drop-shadow(0 2px 8px #e63946cc)' }}>😈</div>
+          <h2 style={{ color: devilPurple, fontFamily: 'cursive', fontWeight: 900 }}>Devil's Signature Review</h2>
+          <div style={{ background: '#ffd16633', color: devilRed, borderRadius: '1rem', padding: '1rem', margin: '1rem 0', wordBreak: 'break-all', fontWeight: 600 }}>
             <b>Message to sign:</b>
-            <div style={{ fontFamily: 'monospace', fontSize: '1em', marginTop: '0.5em' }}>{pendingTx.msg}</div>
+            <div style={{ fontFamily: 'Fira Mono, monospace', fontSize: '1.1em', marginTop: '0.5em', color: devilPurple }}>{pendingTx.msg}</div>
           </div>
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-            <button className="fd-btn" style={{ background: devilPurple }} onClick={handleApproveTx}>Sign & Approve</button>
-            <button className="fd-btn" style={{ background: devilRed }} onClick={handleRejectTx}>Reject</button>
+            <button className="fd-btn" style={{ background: devilPurple }} onClick={handleApproveTx}>
+              <span role="img" aria-label="pitchfork">🔱</span> Sign & Approve
+            </button>
+            <button className="fd-btn" style={{ background: devilRed }} onClick={handleRejectTx}>
+              <span role="img" aria-label="no">❌</span> Reject
+            </button>
+          </div>
+          <div style={{ marginTop: 16, color: devilRed, fontSize: '0.95em', fontWeight: 500 }}>
+            <span role="img" aria-label="devil">😈</span> <b>FunnyDevil Tip:</b> Never sign anything you don't understand!<br />
+            <span style={{ color: devilPurple }}>Your signature is generated by your PUF key — no private key is ever stored or shown.</span>
           </div>
         </div>
       )}
