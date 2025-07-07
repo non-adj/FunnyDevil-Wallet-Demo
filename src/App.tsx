@@ -1,49 +1,33 @@
 import { useState, useRef } from 'react';
-import { keccak256, Wallet } from 'ethers';
 import WalletConnect from '@walletconnect/client';
 // @ts-ignore
 import QRCode from 'qrcode';
 import './App.css';
+import { registerFido2PUFWallet, signWithPUFWallet } from './pufFido2';
 
 const devilRed = '#e63946';
 const devilPurple = '#7209b7';
 const devilYellow = '#ffd166';
 
 function App() {
-  const [step, setStep] = useState<'intro' | 'registering' | 'ready' | 'wc-connect'>('intro');
+  const [step, setStep] = useState<'intro' | 'registering' | 'ready' | 'wc-connect' | 'review'>('intro');
   const [ethAddress, setEthAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [wcQr, setWcQr] = useState<string | null>(null);
   const [wcConnected, setWcConnected] = useState(false);
   const [wcPeer, setWcPeer] = useState<any>(null);
-  const walletRef = useRef<Wallet | null>(null);
+  const [pendingTx, setPendingTx] = useState<{msg: string, id: number} | null>(null);
+  const walletRef = useRef<any>(null); // Wallet type from ethers
   const connectorRef = useRef<any>(null);
 
-  // 1. Register FIDO2 key and derive wallet
+  // 1. Register FIDO2 key and derive wallet (modularized)
   const handleRegister = async () => {
     setStep('registering');
     setError(null);
     try {
-      const publicKey: PublicKeyCredentialCreationOptions = {
-        challenge: window.crypto.getRandomValues(new Uint8Array(32)),
-        rp: { name: 'FunnyDevil Wallet' },
-        user: {
-          id: window.crypto.getRandomValues(new Uint8Array(16)),
-          name: 'funnydevil@example.com',
-          displayName: 'FunnyDevil User',
-        },
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-        authenticatorSelection: { userVerification: 'preferred' },
-        timeout: 60000,
-        attestation: 'direct',
-      };
-      const cred = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential;
-      if (!cred) throw new Error('No credential returned.');
-      const rawId = cred.rawId;
-      const hash = keccak256(new Uint8Array(rawId));
-      const wallet = new Wallet(hash);
+      const { address, wallet } = await registerFido2PUFWallet();
       walletRef.current = wallet;
-      setEthAddress(wallet.address);
+      setEthAddress(address);
       setStep('ready');
     } catch (e: any) {
       setError(e.message || 'Registration failed.');
@@ -51,7 +35,7 @@ function App() {
     }
   };
 
-  // 2. WalletConnect integration
+  // 2. WalletConnect integration with transaction review
   const handleWalletConnect = async () => {
     setError(null);
     try {
@@ -82,15 +66,8 @@ function App() {
       connector.on('call_request', async (error, payload) => {
         if (error) { setError('Call request error'); return; }
         if (payload.method === 'personal_sign' || payload.method === 'eth_sign') {
-          try {
-            const msg = payload.params[0];
-            const wallet = walletRef.current;
-            if (!wallet) throw new Error('Wallet not available');
-            const sig = await wallet.signMessage(msg);
-            connector.approveRequest({ id: payload.id, result: sig });
-          } catch (e: any) {
-            connector.rejectRequest({ id: payload.id, error: { message: e.message } });
-          }
+          setPendingTx({ msg: payload.params[0], id: payload.id });
+          setStep('review');
         } else {
           connector.rejectRequest({ id: payload.id, error: { message: 'Method not supported in demo' } });
         }
@@ -98,6 +75,29 @@ function App() {
     } catch (e: any) {
       setError(e.message || 'WalletConnect failed');
     }
+  };
+
+  // 3. Handle transaction review and signing
+  const handleApproveTx = async () => {
+    if (!pendingTx || !walletRef.current || !connectorRef.current) return;
+    try {
+      const sig = await signWithPUFWallet(walletRef.current, pendingTx.msg);
+      connectorRef.current.approveRequest({ id: pendingTx.id, result: sig });
+      setPendingTx(null);
+      setStep('wc-connect');
+    } catch (e: any) {
+      connectorRef.current.rejectRequest({ id: pendingTx.id, error: { message: e.message } });
+      setError(e.message || 'Signing failed');
+      setPendingTx(null);
+      setStep('wc-connect');
+    }
+  };
+  const handleRejectTx = () => {
+    if (pendingTx && connectorRef.current) {
+      connectorRef.current.rejectRequest({ id: pendingTx.id, error: { message: 'User rejected' } });
+    }
+    setPendingTx(null);
+    setStep('wc-connect');
   };
 
   // 3. UI
@@ -157,11 +157,28 @@ function App() {
           {error && <div className="fd-error">{error}</div>}
         </div>
       )}
+
+      {/* Transaction Review Modal */}
+      {step === 'review' && pendingTx && (
+        <div className="fd-wallet-card" style={{ border: `2px solid ${devilPurple}`, boxShadow: '0 0 24px #7209b799' }}>
+          <h2 style={{ color: devilPurple }}>Review Signature Request</h2>
+          <div style={{ background: '#ffd16633', color: devilRed, borderRadius: '1rem', padding: '1rem', margin: '1rem 0', wordBreak: 'break-all' }}>
+            <b>Message to sign:</b>
+            <div style={{ fontFamily: 'monospace', fontSize: '1em', marginTop: '0.5em' }}>{pendingTx.msg}</div>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button className="fd-btn" style={{ background: devilPurple }} onClick={handleApproveTx}>Sign & Approve</button>
+            <button className="fd-btn" style={{ background: devilRed }} onClick={handleRejectTx}>Reject</button>
+          </div>
+        </div>
+      )}
       <footer className="fd-footer">
         <p>
           <b>How does this work?</b> <br />
-          Your FIDO2 key generates a unique credential using a physically unclonable function (PUF) inside the hardware. We use its rawId as a source of entropy to deterministically create an Ethereum wallet. <br />
-          <span style={{ color: devilRed }}>No private key is ever stored, shown, or transmitted.</span>
+          Your FIDO2 key generates a unique credential using a physically unclonable function (PUF) inside the hardware. <br />
+          <b>No private key is ever stored — not even inside the device!</b> <br />
+          We use the credential's public key to deterministically create your Ethereum address. All signing is performed by the hardware, never in software. <br />
+          <span style={{ color: devilRed }}>This is the same security model used by Cryptnox Pro and leading PUF research.</span>
         </p>
         <p style={{ fontSize: '0.9em', color: '#888' }}>
           Inspired by the FunnyDevil Wallet concept. For demo/educational use only. 😈
