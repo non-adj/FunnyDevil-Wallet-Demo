@@ -1,0 +1,3 @@
+<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
+
+FunnyDevil Wallet Demo: This is a React + Vite web app that demonstrates creating an Ethereum wallet using a FIDO2 + PUF security key. Use WebAuthn APIs for FIDO2 interaction and ethers.js for Ethereum wallet generation. The UI should be fun, simple, and themed as 'FunnyDevil', with clear steps and educational narrative. Do not display or store private keys. Focus on security, user experience, and education.

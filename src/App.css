@@ -1,0 +1,119 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+/* FunnyDevil Wallet Demo custom styles */
+.fd-container {
+  background: linear-gradient(135deg, #ffd166 0%, #e63946 100%);
+  min-height: 100vh;
+  padding: 2rem;
+  border-radius: 2rem;
+  box-shadow: 0 0 32px #7209b744;
+  max-width: 480px;
+  margin: 2rem auto;
+  font-family: 'Comic Sans MS', 'Comic Sans', cursive, sans-serif;
+}
+.fd-steps {
+  text-align: left;
+  margin: 2rem auto;
+  color: #7209b7;
+  font-size: 1.1rem;
+  font-weight: 500;
+  background: #fff6;
+  border-radius: 1rem;
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 8px #e6394622;
+}
+.fd-btn {
+  background: #e63946;
+  color: #fff;
+  border: none;
+  border-radius: 1.5rem;
+  padding: 1rem 2.5rem;
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin: 1.5rem 0;
+  cursor: pointer;
+  box-shadow: 0 2px 8px #7209b744;
+  transition: background 0.2s, transform 0.2s;
+}
+.fd-btn:hover {
+  background: #7209b7;
+  transform: scale(1.05);
+}
+.fd-wallet-card {
+  background: #fff;
+  border-radius: 1.5rem;
+  box-shadow: 0 2px 16px #e6394644;
+  padding: 2rem 1.5rem;
+  margin: 2rem auto;
+  max-width: 400px;
+}
+.fd-address {
+  font-family: 'Fira Mono', monospace;
+  font-size: 1.1rem;
+  background: #ffd16633;
+  color: #e63946;
+  padding: 0.7rem 1rem;
+  border-radius: 1rem;
+  margin: 1rem 0;
+  word-break: break-all;
+}
+.fd-error {
+  color: #fff;
+  background: #e63946;
+  border-radius: 1rem;
+  padding: 1rem;
+  margin: 1rem auto;
+  max-width: 400px;
+  font-weight: bold;
+  box-shadow: 0 2px 8px #e6394644;
+}
+.fd-footer {
+  margin-top: 2rem;
+  font-size: 1rem;
+  color: #7209b7;
+  background: #fff6;
+  border-radius: 1rem;
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 8px #ffd16644;
+}
