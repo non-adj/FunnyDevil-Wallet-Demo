@@ -115,5 +115,3 @@ The design philosophy is to create a wallet that is secure, informative, and wel
 FunnyDevil wallet is a concept derived from theorizing a 'Fully Deterministic' wallet that uses a PUFido key, which is a FIDO2 key with Physically Uncloneable Functionality.
 
 The playful 'FunnyDevil' theme is intended to make the Deterministic Nature of the wallet a form of entertainment, while also providing a strong security model.
-
-
