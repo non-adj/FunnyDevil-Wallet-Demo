@@ -1,7 +1,27 @@
 import { useState, useRef } from 'react';
+// Simple error boundary for QR scanner step
+import React from 'react';
+
+class QRErrorBoundary extends React.Component<{ children: React.ReactNode, onError: (err: Error) => void }, { hasError: boolean }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error) {
+    this.props.onError(error);
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
 import WalletConnect from '@walletconnect/client';
 // @ts-ignore
 import QRCode from 'qrcode';
+import { Html5QrScanner } from './Html5QrScanner';
 import './App.css';
 import { registerFido2PUFWallet, signWithPUFWallet } from './pufFido2';
 
@@ -10,13 +30,14 @@ const devilPurple = '#7209b7';
 const devilYellow = '#ffd166';
 
 function App() {
-  const [step, setStep] = useState<'intro' | 'registering' | 'ready' | 'wc-connect' | 'review'>('intro');
+  const [step, setStep] = useState<'intro' | 'registering' | 'ready' | 'wc-connect' | 'review' | 'scan-qr'>('intro');
   const [ethAddress, setEthAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [wcQr, setWcQr] = useState<string | null>(null);
   const [wcConnected, setWcConnected] = useState(false);
   const [wcPeer, setWcPeer] = useState<any>(null);
   const [pendingTx, setPendingTx] = useState<{msg: string, id: number} | null>(null);
+  const [scannedUri, setScannedUri] = useState<string | null>(null);
   const walletRef = useRef<any>(null); // Wallet type from ethers
   const connectorRef = useRef<any>(null);
 
@@ -46,6 +67,48 @@ function App() {
       }
       const qr = await QRCode.toDataURL(connector.uri);
       setWcQr(qr);
+      setStep('wc-connect');
+
+      connector.on('connect', (error, payload) => {
+        if (error) { setError('WalletConnect connection error'); return; }
+        setWcConnected(true);
+        setWcPeer(payload.params[0].peerMeta);
+      });
+      connector.on('disconnect', () => {
+        setWcConnected(false);
+        setWcPeer(null);
+        setStep('ready');
+      });
+      connector.on('session_request', (error) => {
+        if (error) { setError('Session request error'); return; }
+        if (!walletRef.current) { setError('Wallet not available'); return; }
+        connector.approveSession({ accounts: [walletRef.current.address], chainId: 1 });
+      });
+      connector.on('call_request', async (error, payload) => {
+        if (error) { setError('Call request error'); return; }
+        if (payload.method === 'personal_sign' || payload.method === 'eth_sign') {
+          setPendingTx({ msg: payload.params[0], id: payload.id });
+          setStep('review');
+        } else {
+          connector.rejectRequest({ id: payload.id, error: { message: 'Method not supported in demo' } });
+        }
+      });
+    } catch (e: any) {
+      setError(e.message || 'WalletConnect failed');
+    }
+  };
+
+  // 2b. WalletConnect via scanned QR code
+  const handleWalletConnectFromUri = async (uri: string) => {
+    setError(null);
+    // Detect WalletConnect v2 URI (relay-protocol param, no bridge param)
+    if (/relay-protocol=/.test(uri) && !/bridge=/.test(uri)) {
+      setError('This is a WalletConnect v2 URI. This demo only supports WalletConnect v1 links. Please use a v1-compatible dApp or QR code.');
+      return;
+    }
+    try {
+      const connector = new WalletConnect({ uri });
+      connectorRef.current = connector;
       setStep('wc-connect');
 
       connector.on('connect', (error, payload) => {
@@ -135,9 +198,78 @@ function App() {
             This address is derived from your FIDO2 key using a PUF.<br />
             <b>Keep your key safe!</b> Losing it means losing access to your wallet.
           </p>
-          <button className="fd-btn" onClick={handleWalletConnect}>Connect to DApp (WalletConnect)</button>
+          <button className="fd-btn" onClick={handleWalletConnect}>Connect to DApp (Show QR)</button>
+          <button className="fd-btn" onClick={() => setStep('scan-qr')}>Scan DApp QR (Mobile/Desktop)</button>
           <button className="fd-btn" onClick={() => setStep('intro')}>Start Over</button>
           {error && <div className="fd-error">{error}</div>}
+        </div>
+      )}
+
+      {/* QR Code Scanner Step */}
+      {step === 'scan-qr' && (
+        <div className="fd-wallet-card">
+          <h2 style={{ color: devilRed }}>Scan WalletConnect QR</h2>
+          <p style={{ color: devilPurple }}>Point your camera at the WalletConnect QR code from the DApp you want to connect to.</p>
+          <QRErrorBoundary onError={(err) => setError(err.message || 'QR scanner error') }>
+            <div style={{ margin: '1rem auto', maxWidth: 320 }}>
+              {/* Use a unique key to force remount on error or step change */}
+              <Html5QrScanner
+                key={step + (error ? '-err' : '')}
+                onScan={(text) => {
+                  setScannedUri(text);
+                  setError(null);
+                }}
+                onError={(err: any) => {
+                  if (err && err.name === 'NotAllowedError') {
+                    setError('Camera access denied. Please allow camera permissions in your browser settings.');
+                  } else if (err && err.message) {
+                    setError(err.message);
+                  } else {
+                    setError('Camera or scanner error. Make sure your device has a camera and permissions are granted.');
+                  }
+                }}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </QRErrorBoundary>
+          <div style={{ margin: '1rem auto', maxWidth: 320, textAlign: 'center' }}>
+            <input
+              type="text"
+              placeholder="Paste WalletConnect URI here"
+              value={scannedUri || ''}
+              onChange={e => setScannedUri(e.target.value)}
+              style={{ width: '100%', padding: '0.5em', borderRadius: 8, border: '1px solid #ccc', marginBottom: 8 }}
+            />
+            <button
+              className="fd-btn"
+              style={{ background: devilPurple, marginTop: 4, width: '100%' }}
+              disabled={!scannedUri}
+              onClick={() => {
+                if (scannedUri) {
+                  handleWalletConnectFromUri(scannedUri);
+                  setScannedUri(null);
+                }
+              }}
+            >Connect to DApp</button>
+          </div>
+          <button className="fd-btn" onClick={() => { setError(null); setScannedUri(null); setStep('ready'); }}>Cancel</button>
+          {/* Show scannedUri below input if present and not empty */}
+          {scannedUri && (
+            <div style={{ fontSize: '0.8em', color: devilPurple, marginTop: '0.5em', wordBreak: 'break-all' }}>{scannedUri}</div>
+          )}
+          {error && (
+            <div className="fd-error">
+              {error}
+              {error.includes('camera') && (
+                <>
+                  <br />
+                  <button className="fd-btn" style={{ marginTop: 8, background: devilYellow, color: '#222' }} onClick={() => setError(null)}>
+                    Retry Scanner
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
       {step === 'wc-connect' && (

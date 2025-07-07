@@ -99,19 +99,35 @@ Don't lose your hardware key, or you lose your funds 😈
 
 
 
-##############################################FunnyDevil Wallet Technical Overview
+############################################## FunnyDevil Wallet Technical Overview
 
-// This section explains how to download / localhost FunnyDevil, provides a technical overview of the FunnyDevil Wallet, including its architecture, components, and security features.
+This section provides a technical overview of the FunnyDevil Wallet, including its architecture, components, and security features. To run FunnyDevil locally, see the **Getting Started** section above.
 
+**Architecture & Components:**
+- **Frontend:** React + Vite + TypeScript web app, with a fun 'FunnyDevil' theme and step-based UI.
+- **FIDO2 + PUF Security Key:** All cryptographic operations (registration, signing) are performed by the hardware key using WebAuthn APIs. If the key is PUF-enabled (e.g., PUFido Clife Key), the private key is never stored, not even inside the device. Instead, it is generated on-demand using the PUF mechanism.
+- **Ethereum Wallet Generation:** The public key from the FIDO2 credential is used to deterministically derive an Ethereum address using ethers.js. No private key is ever exposed or stored by the app.
+- **WalletConnect Integration:** Supports both v1 and v2 protocols for connecting to dApps. Users can display a QR code for DApps to scan, scan a DApp's QR code, or manually enter a WalletConnect URI. v2 support includes session proposal, approval, and transaction review.
+- **QR Code Scanning:** Uses `html5-qrcode` for robust camera support and error handling. Users can scan WalletConnect URIs from DApps on desktop or mobile.
 
+**Security Model:**
+- No private key is ever stored or displayed by the app or the device (if using a PUF key).
+- All signing is performed inside the security key, leveraging the PUF mechanism for on-demand key generation.
+- The app never has access to any secret material; it only receives public keys and signatures.
+- Losing your FIDO2/PUF key means losing access to your wallet. There is no backup or recovery of the private key.
 
+**Educational Narrative:**
+- The UI guides users through each step, explaining the PUF model, FIDO2/WebAuthn, and the security benefits of on-demand key generation.
+- The playful 'FunnyDevil' theme makes the deterministic, hardware-based security model fun and approachable.
 
-#############################################FunnyDevil Code Design, Comments, and Philosophy.
+For more details, see the design and philosophy sections below.
 
-// This is a conceptual design for the FunnyDevil Wallet, enabled by vibe coding, agentic computing, and the use of PUFido keys.
+############################################# FunnyDevil Code Design, Comments, and Philosophy
+
+This section describes the conceptual design for the FunnyDevil Wallet, enabled by agentic computing and the use of PUFido keys.
 
 The design philosophy is to create a wallet that is secure, informative, and well-designed, without ever seeing or storing the private key in a retrievable form.
 
-FunnyDevil wallet is a concept derived from theorizing a 'Fully Deterministic' wallet that uses a PUFido key, which is a FIDO2 key with Physically Uncloneable Functionality.
+FunnyDevil Wallet is a concept derived from theorizing a 'Fully Deterministic' wallet that uses a PUFido key, which is a FIDO2 key with Physically Uncloneable Functionality.
 
-The playful 'FunnyDevil' theme is intended to make the Deterministic Nature of the wallet a form of entertainment, while also providing a strong security model.
+The playful 'FunnyDevil' theme is intended to make the deterministic nature of the wallet a form of entertainment, while also providing a strong security model.
